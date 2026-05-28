@@ -1,0 +1,6 @@
+{
+  "framework": "nextjs",
+  "installCommand": "cd fepa-nextjs && npm install --legacy-peer-deps",
+  "buildCommand": "cd fepa-nextjs && npm run build",
+  "outputDirectory": "fepa-nextjs/.next"
+}
