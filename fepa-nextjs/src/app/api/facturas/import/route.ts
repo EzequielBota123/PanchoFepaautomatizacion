@@ -28,23 +28,30 @@ export async function POST(req: NextRequest) {
     const buf  = Buffer.from(await file.arrayBuffer())
     const wb   = XLSX.read(buf, { type: 'buffer' })
     const ws   = wb.Sheets[wb.SheetNames[0]]
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
+    const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
 
-    if (rows.length === 0) return NextResponse.json({ error: 'Archivo vacío' }, { status: 400 })
-    if (rows.length > 500) return NextResponse.json({ error: 'Máximo 500 filas' }, { status: 400 })
+    if (rawRows.length === 0) return NextResponse.json({ error: 'Archivo vacío' }, { status: 400 })
+    if (rawRows.length > 500) return NextResponse.json({ error: 'Máximo 500 filas' }, { status: 400 })
+
+    // Normalize keys: lowercase + trim so column names are case-insensitive
+    const rows = rawRows.map(r => {
+      const n: Record<string, unknown> = {}
+      for (const k of Object.keys(r)) n[k.toLowerCase().trim().replace(/\s+/g, '_')] = r[k]
+      return n
+    })
 
     const today = new Date().toISOString().split('T')[0]
 
     const filas: FilaImportFactura[] = rows.map((row, idx) => {
       const errores: string[] = []
 
-      const cliente_nombre = String(row['Cliente'] || row['cliente'] || '').trim()
-      const tipoRaw        = String(row['Tipo'] || row['tipo'] || 'B').trim().toUpperCase()
-      const totalRaw       = Number(row['Total'] || row['total'] || 0)
-      const fecha          = parseExcelDate(row['Fecha'] || row['fecha'], today)
-      const fecha_vto      = parseExcelDate(row['Fecha Vto'] || row['fecha_vto'] || row['Vencimiento'] || '', '')
-      const metodoRaw      = String(row['Metodo Pago'] || row['metodo_pago'] || 'contado').trim().toLowerCase()
-      const obs            = String(row['Obs'] || row['obs'] || row['Observaciones'] || '').trim()
+      const cliente_nombre = String(row['cliente'] || row['cliente_nombre'] || row['razon_social'] || '').trim()
+      const tipoRaw        = String(row['tipo'] || 'B').trim().toUpperCase()
+      const totalRaw       = Number(row['total'] || 0)
+      const fecha          = parseExcelDate(row['fecha'], today)
+      const fecha_vto      = parseExcelDate(row['fecha_vto'] || row['fecha_de_vencimiento'] || row['vencimiento'] || '', '')
+      const metodoRaw      = String(row['metodo_pago'] || row['metodo'] || 'contado').trim().toLowerCase()
+      const obs            = String(row['obs'] || row['observaciones'] || row['observacion'] || '').trim()
 
       if (!cliente_nombre) errores.push('Cliente es obligatorio')
       if (isNaN(totalRaw) || totalRaw <= 0) errores.push('Total debe ser mayor a 0')
