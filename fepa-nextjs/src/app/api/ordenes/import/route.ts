@@ -3,6 +3,31 @@ import * as XLSX from 'xlsx'
 import { sb } from '@/lib/supabase'
 import type { FilaImportOV } from '@/lib/types'
 
+// Strips all non-alphanumeric chars for fuzzy column matching
+function norm(s: string) { return s.toLowerCase().replace(/[^a-z0-9]/g, '') }
+
+// Finds the value for a column by matching any of the given keywords (fuzzy)
+function col(row: Record<string, unknown>, ...keywords: string[]): string {
+  for (const [k, v] of Object.entries(row)) {
+    const kn = norm(k)
+    if (keywords.some(kw => kn === norm(kw) || kn.includes(norm(kw)))) {
+      return String(v ?? '').trim()
+    }
+  }
+  return ''
+}
+
+function parseExcelDate(val: string, fallback: string): string {
+  if (!val) return fallback
+  if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val
+  const n = Number(val)
+  if (!isNaN(n) && n > 40000) {
+    const d = XLSX.SSF.parse_date_code(n)
+    if (d) return `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`
+  }
+  return fallback
+}
+
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData()
@@ -11,70 +36,53 @@ export async function POST(req: NextRequest) {
 
     if (!file) return NextResponse.json({ error: 'No file' }, { status: 400 })
 
-    const buf  = Buffer.from(await file.arrayBuffer())
-    const wb   = XLSX.read(buf, { type: 'buffer' })
-    const ws   = wb.Sheets[wb.SheetNames[0]]
+    const buf = Buffer.from(await file.arrayBuffer())
+    const wb  = XLSX.read(buf, { type: 'buffer' })
+
+    // Find the first sheet that has data (skip instruction sheets)
+    let ws = wb.Sheets[wb.SheetNames[0]]
+    for (const name of wb.SheetNames) {
+      const sheet = wb.Sheets[name]
+      const rows  = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' })
+      if (rows.length > 0) { ws = sheet; break }
+    }
+
     const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
 
     if (rawRows.length === 0) return NextResponse.json({ error: 'Archivo vacío' }, { status: 400 })
     if (rawRows.length > 500) return NextResponse.json({ error: 'Máximo 500 filas' }, { status: 400 })
 
-    // Normalize keys: lowercase + trim so column names are case-insensitive
-    const rows = rawRows.map(r => {
-      const n: Record<string, unknown> = {}
-      for (const k of Object.keys(r)) n[k.toLowerCase().trim().replace(/\s+/g, '_')] = r[k]
-      return n
-    })
-
     const today = new Date().toISOString().split('T')[0]
+    const columnas_detectadas = rawRows.length > 0 ? Object.keys(rawRows[0]) : []
 
-    const filas: FilaImportOV[] = rows.map((row, idx) => {
+    const filas: FilaImportOV[] = rawRows.map((row, idx) => {
       const errores: string[] = []
 
-      const cliente_nombre = String(row['cliente'] || row['cliente_nombre'] || row['razon_social'] || '').trim()
-      const totalRaw       = Number(row['total'] || 0)
-      const descuentoRaw   = Number(row['descuento'] || 0)
-      const fechaRaw       = String(row['fecha'] || today).trim()
-      const fecha_entrega  = String(row['fecha_entrega'] || row['fecha_de_entrega'] || '').trim()
-      const obs            = String(row['obs'] || row['observaciones'] || row['observacion'] || '').trim()
-      const vendedor       = String(row['vendedor'] || '').trim()
+      const cliente_nombre = col(row, 'cliente', 'razonsocial', 'nombre', 'clientenombre')
+      const totalStr       = col(row, 'total', 'monto', 'importe', 'precio')
+      const totalRaw       = Number(totalStr.replace(/[^\d.,]/g, '').replace(',', '.')) || 0
+      const descStr        = col(row, 'descuento', 'desc', 'rebaja')
+      const descuentoRaw   = Number(descStr.replace(/[^\d.,]/g, '').replace(',', '.')) || 0
+      const fechaRaw       = col(row, 'fecha', 'fechaemision', 'dia') || today
+      const fechaEntRaw    = col(row, 'fechaentrega', 'entrega', 'fechadev')
+      const obs            = col(row, 'obs', 'observaciones', 'nota', 'detalle')
+      const vendedor       = col(row, 'vendedor', 'vend', 'comercial')
 
       if (!cliente_nombre) errores.push('Cliente es obligatorio')
       if (isNaN(totalRaw) || totalRaw <= 0) errores.push('Total debe ser mayor a 0')
 
-      let fecha = fechaRaw
-      if (fechaRaw && !/^\d{4}-\d{2}-\d{2}$/.test(fechaRaw)) {
-        // Try to parse Excel date number
-        const n = Number(fechaRaw)
-        if (!isNaN(n) && n > 0) {
-          const d = XLSX.SSF.parse_date_code(n)
-          if (d) fecha = `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`
-          else errores.push(`Fecha inválida: ${fechaRaw}`)
-        }
-      }
-
-      let fechaEnt = fecha_entrega
-      if (fecha_entrega && !/^\d{4}-\d{2}-\d{2}$/.test(fecha_entrega)) {
-        const n = Number(fecha_entrega)
-        if (!isNaN(n) && n > 0) {
-          const d = XLSX.SSF.parse_date_code(n)
-          if (d) fechaEnt = `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`
-        } else {
-          fechaEnt = ''
-        }
-      }
-
-      const total    = isNaN(totalRaw) ? 0 : totalRaw
-      const descuento = isNaN(descuentoRaw) ? 0 : descuentoRaw
-      const subtotal  = total + descuento
+      const fecha      = parseExcelDate(fechaRaw, today)
+      const fechaEnt   = fechaEntRaw ? parseExcelDate(fechaEntRaw, '') : ''
+      const total      = isNaN(totalRaw) ? 0 : totalRaw
+      const descuento  = isNaN(descuentoRaw) ? 0 : descuentoRaw
 
       return {
         fila: idx + 2,
         cliente_nombre,
         total,
-        subtotal,
+        subtotal: total + descuento,
         descuento,
-        fecha: fecha || today,
+        fecha,
         fecha_entrega: fechaEnt,
         obs,
         vendedor,
@@ -85,26 +93,26 @@ export async function POST(req: NextRequest) {
 
     if (modo === 'preview') {
       return NextResponse.json({
-        total:    filas.length,
-        validas:  filas.filter(f => f.valido).length,
-        invalidas: filas.filter(f => !f.valido).length,
+        total:               filas.length,
+        validas:             filas.filter(f => f.valido).length,
+        invalidas:           filas.filter(f => !f.valido).length,
+        columnas_detectadas,
         filas,
       })
     }
 
-    // modo === 'import'
     const validas = filas.filter(f => f.valido)
     if (validas.length === 0) {
       return NextResponse.json({ error: 'No hay filas válidas' }, { status: 400 })
     }
 
-    // Buscar clientes para hacer match por razon_social
     const { data: clientesDB } = await sb().from('clientes').select('id,razon_social')
     const mapaClientes = new Map<string, number>(
-      (clientesDB || []).map((c: { id: number; razon_social: string }) => [c.razon_social.toLowerCase().trim(), c.id])
+      (clientesDB || []).map((c: { id: number; razon_social: string }) => [
+        c.razon_social.toLowerCase().trim(), c.id,
+      ])
     )
 
-    // Get current count for nro generation
     const { count: ovCount } = await sb()
       .from('ordenes_venta')
       .select('*', { count: 'exact', head: true })

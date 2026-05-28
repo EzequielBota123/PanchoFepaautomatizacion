@@ -10,6 +10,7 @@ const NAV = [
   { key: 'pipeline',    icon: '◐', label: 'Pipeline',          section: null },
   { key: 'ia',          icon: '◈', label: 'Asistente IA',      section: 'IA' },
   { key: 'ordenes',     icon: '◧', label: 'Órdenes de Venta',  section: 'VENTAS' },
+  { key: 'facturas',   icon: '◫', label: 'Facturas',           section: null },
   { key: 'nc',          icon: '↑',  label: 'Notas de Crédito', section: null },
   { key: 'deudores',    icon: '◑', label: 'Deudores',          section: 'GESTIÓN' },
 ]

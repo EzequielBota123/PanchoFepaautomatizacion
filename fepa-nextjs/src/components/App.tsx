@@ -11,6 +11,7 @@ import { Clientes } from './sections/Clientes'
 import { Pipeline } from './sections/Pipeline'
 import { AsistenteIA } from './sections/AsistenteIA'
 import { Ordenes } from './sections/Ordenes'
+import { Facturas } from './sections/Facturas'
 import { NotasCredito } from './sections/NotasCredito'
 import { Deudores } from './sections/Deudores'
 
@@ -40,6 +41,7 @@ const SECTIONS: Record<string, string> = {
   pipeline:  'Pipeline de Ventas',
   ia:        'Asistente IA',
   ordenes:   'Órdenes de Venta',
+  facturas:  'Facturas',
   nc:        'Notas de Crédito',
   deudores:  'Registro de Deudores',
 }
@@ -159,6 +161,7 @@ export default function App() {
       case 'pipeline':  return <Pipeline />
       case 'ia':        return <AsistenteIA />
       case 'ordenes':   return <Ordenes />
+      case 'facturas':  return <Facturas />
       case 'nc':        return <NotasCredito />
       case 'deudores':  return <Deudores />
       default:          return <Dashboard />
