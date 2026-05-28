@@ -188,6 +188,34 @@ export interface ConfigEmpresa {
 }
 
 // ── EXCEL IMPORT ───────────────────────────────────────────────────────────
+export interface FilaImportOV {
+  fila:           number
+  cliente_nombre: string
+  total:          number
+  subtotal:       number
+  descuento:      number
+  fecha:          string
+  fecha_entrega:  string
+  obs:            string
+  vendedor:       string
+  errores:        string[]
+  valido:         boolean
+}
+
+export interface FilaImportFactura {
+  fila:           number
+  cliente_nombre: string
+  nro:            string
+  tipo:           string
+  total:          number
+  fecha:          string
+  fecha_vto:      string
+  metodo_pago:    string
+  obs:            string
+  errores:        string[]
+  valido:         boolean
+}
+
 export interface FilaImportCliente {
   fila:         number
   razon_social: string

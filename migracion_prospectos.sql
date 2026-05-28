@@ -18,6 +18,4 @@ CREATE INDEX IF NOT EXISTS idx_prospectos_etapa ON prospectos(etapa);
 
 ALTER TABLE prospectos ENABLE ROW LEVEL SECURITY;
 DO $$ BEGIN
-  CREATE POLICY "acceso_total" ON prospectos FOR ALL USING (true) WITH CHECK (true);
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
+  CREATE 

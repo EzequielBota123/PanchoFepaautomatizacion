@@ -12,6 +12,13 @@
   --red: #c8440a;
   --green: #1a6b3a;
   --sidebar-w: 230px;
+
+  /* Aliases para componentes React */
+  --bg-primary: var(--bg);
+  --bg-secondary: var(--surface);
+  --text-primary: var(--text);
+  --text-muted: var(--muted);
+  --primary: var(--accent3);
 }
 
 * { margin:0; padding:0; box-sizing:border-box; }
@@ -699,3 +706,37 @@ a { text-decoration: none; }
   .sidebar { transform: translateX(-100%); }
   .main { margin-left: 0; }
 }
+
+/* ── ALIASES para componentes React ─────────────────────────── */
+.form-control {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 9px 11px;
+  color: var(--text);
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+  width: 100%;
+}
+.form-control:focus { border-color: var(--text); }
+.form-control option { background: var(--surface); }
+
+.btn-primary {
+  background: var(--accent3);
+  color: #fff;
+  border: none;
+}
+.btn-primary:hover:not(:disabled) { background: #153d6e; }
+.btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.btn-secondary {
+  background: var(--surface2);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.btn-secondary:hover:not(:disabled) { border-color: var(--text); }
+.btn-secondary:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.section-content { width: 100%; }
