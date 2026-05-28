@@ -221,7 +221,7 @@ export function Ordenes() {
       const res = await fetch('/api/ordenes/import', { method: 'POST', body: fd })
       if (!res.ok) { const err = await res.json(); throw new Error(err.error) }
       const r = await res.json()
-      addToast(`✅ ${r.importados} órdenes importadas${r.invalidas > 0 ? ` (${r.invalidas} omitidas)` : ''}`)
+      addToast(`✅ ${r.importados} órdenes importadas${r.clientes_creados > 0 ? ` · ${r.clientes_creados} clientes nuevos creados` : ''}${r.invalidas > 0 ? ` · ${r.invalidas} omitidas` : ''}`)
       setShowImport(false); setImportResult(null); setPendingFile(null); cargar()
     } catch (e: unknown) {
       addToast(e instanceof Error ? e.message : 'Error importando', false)
