@@ -5,10 +5,14 @@ import { Toast } from './ui/Toast'
 import { Sidebar } from './Sidebar'
 import { Dashboard } from './sections/Dashboard'
 import { Cobranzas } from './sections/Cobranzas'
+import { FlujoEfectivo } from './sections/FlujoEfectivo'
+import { Alertas } from './sections/Alertas'
 import { Clientes } from './sections/Clientes'
 import { Pipeline } from './sections/Pipeline'
-import { Deudores } from './sections/Deudores'
+import { AsistenteIA } from './sections/AsistenteIA'
 import { Ordenes } from './sections/Ordenes'
+import { NotasCredito } from './sections/NotasCredito'
+import { Deudores } from './sections/Deudores'
 
 // ── App Context ──────────────────────────────────────────────────────────────
 interface AppCtx {
@@ -30,9 +34,13 @@ export const useApp = () => useContext(AppContext)
 const SECTIONS: Record<string, string> = {
   dashboard: 'Dashboard',
   cobranzas: 'Semáforo de Cobranzas',
+  flujo:     'Flujo de Caja',
+  alertas:   'Alertas de Seguimiento',
   clientes:  'Clientes',
-  ordenes:   'Órdenes de Venta',
   pipeline:  'Pipeline de Ventas',
+  ia:        'Asistente IA',
+  ordenes:   'Órdenes de Venta',
+  nc:        'Notas de Crédito',
   deudores:  'Registro de Deudores',
 }
 
@@ -42,7 +50,6 @@ export default function App() {
   const [facturas, setFacturas] = useState<Factura[]>([])
   const [loading, setLoading]   = useState(true)
 
-  // ── Cargar datos ──
   const reload = useCallback(async () => {
     setLoading(true)
     try {
@@ -95,7 +102,6 @@ export default function App() {
       body: JSON.stringify(data),
     })
     setFacturas(prev => prev.map(f => f.id === id ? { ...f, ...data } : f))
-    // Si se paga, actualizar deuda en el state local
     if (data.estado === 'cobrada') {
       const f = facturas.find(x => x.id === id)
       if (f?.cliente_id) {
@@ -147,9 +153,13 @@ export default function App() {
     switch (section) {
       case 'dashboard': return <Dashboard />
       case 'cobranzas': return <Cobranzas />
+      case 'flujo':     return <FlujoEfectivo />
+      case 'alertas':   return <Alertas />
       case 'clientes':  return <Clientes />
-      case 'ordenes':   return <Ordenes />
       case 'pipeline':  return <Pipeline />
+      case 'ia':        return <AsistenteIA />
+      case 'ordenes':   return <Ordenes />
+      case 'nc':        return <NotasCredito />
       case 'deudores':  return <Deudores />
       default:          return <Dashboard />
     }
@@ -182,11 +192,8 @@ function SyncButton({ onSync }: { onSync: () => Promise<void> }) {
 
   const handleSync = async () => {
     setSyncing(true)
-    try {
-      await onSync()
-    } finally {
-      setSyncing(false)
-    }
+    try { await onSync() }
+    finally { setSyncing(false) }
   }
 
   return (
