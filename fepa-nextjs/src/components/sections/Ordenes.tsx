@@ -51,7 +51,7 @@ export function Ordenes() {
   // Import modal
   const [showImport, setShowImport]       = useState(false)
   const [importLoading, setImportLoading] = useState(false)
-  const [importResult, setImportResult]   = useState<{ total: number; validas: number; invalidas: number; filas: FilaImportOV[] } | null>(null)
+  const [importResult, setImportResult]   = useState<{ total: number; validas: number; invalidas: number; filas: FilaImportOV[]; columnas_detectadas?: string[] } | null>(null)
   const [importando, setImportando]       = useState(false)
   const [pendingFile, setPendingFile]     = useState<File | null>(null)
   const fileRef                           = useRef<HTMLInputElement>(null)
@@ -533,6 +533,12 @@ export function Ordenes() {
                     </div>
                   ))}
                 </div>
+                {importResult.columnas_detectadas && importResult.columnas_detectadas.length > 0 && (
+                  <div style={{ marginBottom: 12, padding: '8px 12px', background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+                    <strong>Columnas detectadas:</strong>{' '}
+                    {importResult.columnas_detectadas.join(' · ')}
+                  </div>
+                )}
                 <div style={{ overflowX: 'auto', maxHeight: 340, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                     <thead style={{ position: 'sticky', top: 0 }}>

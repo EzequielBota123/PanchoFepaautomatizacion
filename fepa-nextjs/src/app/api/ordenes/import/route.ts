@@ -79,7 +79,8 @@ export async function POST(req: NextRequest) {
 
       const cliente_nombre = col(row,
         'cliente', 'razonsocial', 'razon', 'nombre', 'clientenombre',
-        'nombrecliente', 'empresa', 'razoncomercial'
+        'nombrecliente', 'empresa', 'razoncomercial', 'denominacion',
+        'cte', 'fantasia', 'nombrefantasia', 'firma', 'sociedad', 'comprador'
       )
       const totalStr   = col(row, 'total', 'monto', 'importe', 'precio', 'valor', 'subtotal')
       const totalRaw   = parseAmount(totalStr)
@@ -90,7 +91,6 @@ export async function POST(req: NextRequest) {
       const obs        = col(row, 'obs', 'observaciones', 'nota', 'detalle', 'descripcion')
       const vendedor   = col(row, 'vendedor', 'vend', 'comercial', 'asesor')
 
-      if (!cliente_nombre) errores.push('Cliente es obligatorio')
       if (isNaN(totalRaw) || totalRaw <= 0) errores.push('Total debe ser mayor a 0')
 
       return {
@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
     const nuevosNombres = [...new Set(
       validas
         .map(f => f.cliente_nombre.toLowerCase().trim())
-        .filter(n => !mapaClientes.has(n))
+        .filter(n => n && !mapaClientes.has(n))
     )]
 
     if (nuevosNombres.length > 0) {
