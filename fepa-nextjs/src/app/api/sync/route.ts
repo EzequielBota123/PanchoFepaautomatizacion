@@ -6,16 +6,45 @@ const sb = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-const CTB_API_KEY = process.env.CTB_API_KEY || ''
-const CTB_PROXY   = process.env.CTB_PROXY_URL || ''
-const CTB_BASE    = 'https://app.contabilium.com/api'
+const CTB_CLIENT_ID     = process.env.CTB_CLIENT_ID || process.env.CTB_API_KEY || ''
+const CTB_CLIENT_SECRET = process.env.CTB_CLIENT_SECRET || process.env.CTB_API_KEY || ''
+const CTB_BASE          = 'https://rest.contabilium.com'
+
+let cachedToken: { token: string; expiresAt: number } | null = null
+
+async function getToken(): Promise<string> {
+  if (cachedToken && Date.now() < cachedToken.expiresAt) return cachedToken.token
+
+  const res = await fetch(`${CTB_BASE}/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type:    'client_credentials',
+      client_id:     CTB_CLIENT_ID,
+      client_secret: CTB_CLIENT_SECRET,
+    }),
+    signal: AbortSignal.timeout(15000),
+  })
+  if (!res.ok) throw new Error(`CTB auth ${res.status}: ${await res.text()}`)
+  const data = await res.json()
+  const token = data.access_token
+  const expiresIn = data.expires_in || 3600
+  cachedToken = { token, expiresAt: Date.now() + (expiresIn - 60) * 1000 }
+  return token
+}
 
 async function ctbFetch(path: string, opts: RequestInit = {}) {
-  const sep = path.includes('?') ? '&' : '?'
-  const url = CTB_PROXY
-    ? `${CTB_PROXY}${path}${sep}api_key=${CTB_API_KEY}`
-    : `${CTB_BASE}${path}${sep}api_key=${CTB_API_KEY}`
-  const res = await fetch(url, { ...opts, signal: AbortSignal.timeout(20000) })
+  const token = await getToken()
+  const url   = `${CTB_BASE}${path}`
+  const res   = await fetch(url, {
+    ...opts,
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/json',
+      ...(opts.headers || {}),
+    },
+    signal: AbortSignal.timeout(20000),
+  })
   if (!res.ok) throw new Error(`CTB ${res.status}: ${await res.text()}`)
   return res.json()
 }
@@ -40,8 +69,8 @@ async function paginateAll(path: string) {
 
 // POST /api/sync
 export async function POST(req: NextRequest) {
-  if (!CTB_API_KEY) {
-    return NextResponse.json({ error: 'CTB_API_KEY no configurada' }, { status: 400 })
+  if (!CTB_CLIENT_ID || !CTB_CLIENT_SECRET) {
+    return NextResponse.json({ error: 'CTB_CLIENT_ID y CTB_CLIENT_SECRET no configuradas' }, { status: 400 })
   }
 
   let modulos: string[] = ['clientes', 'facturas', 'presupuestos', 'proveedores', 'remitos']
@@ -236,9 +265,13 @@ export async function POST(req: NextRequest) {
 
 // GET /api/sync — test connection
 export async function GET() {
-  if (!CTB_API_KEY) return NextResponse.json({ connected: false, error: 'Sin API key' })
-  // URL base pendiente de confirmar con Contabilium
-  return NextResponse.json({ connected: false, error: 'Endpoint pendiente de configuración — consultá la documentación de Contabilium' })
+  if (!CTB_CLIENT_ID) return NextResponse.json({ connected: false, error: 'Sin credenciales' })
+  try {
+    await getToken()
+    return NextResponse.json({ connected: true })
+  } catch (e: unknown) {
+    return NextResponse.json({ connected: false, error: (e as Error).message })
+  }
 }
 
 function mapEstadoPresup(raw: number | string) {

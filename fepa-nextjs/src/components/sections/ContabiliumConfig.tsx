@@ -106,10 +106,10 @@ export function ContabiliumConfig() {
         <div style={{ background: 'var(--surface2)', borderRadius: 6, padding: '12px 16px', fontSize: 13 }}>
           <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1 }}>Configuración de variables</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '6px 16px', alignItems: 'center' }}>
-            <code style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: '#1a4a7a' }}>CTB_API_KEY</code>
-            <span style={{ fontSize: 12, color: 'var(--muted)' }}>Tu API Key de Contabilium (Settings → Integraciones → API)</span>
-            <code style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: '#1a4a7a' }}>CTB_PROXY_URL</code>
-            <span style={{ fontSize: 12, color: 'var(--muted)' }}>Opcional — si usás un proxy CORS</span>
+            <code style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: '#1a4a7a' }}>CTB_CLIENT_ID</code>
+            <span style={{ fontSize: 12, color: 'var(--muted)' }}>Client ID de Contabilium (Configuración → API)</span>
+            <code style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: '#1a4a7a' }}>CTB_CLIENT_SECRET</code>
+            <span style={{ fontSize: 12, color: 'var(--muted)' }}>Client Secret de Contabilium (Configuración → API)</span>
           </div>
         </div>
       </div>
@@ -171,9 +171,9 @@ export function ContabiliumConfig() {
         <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 10, color: 'var(--muted)' }}>¿Cómo obtener la API Key de Contabilium?</h3>
         <ol style={{ paddingLeft: 20, fontSize: 13, color: 'var(--muted)', lineHeight: 1.8 }}>
           <li>Ingresá a tu cuenta en <strong>app.contabilium.com</strong></li>
-          <li>Ir a <strong>Configuración → Integraciones → API</strong></li>
-          <li>Copiá el API Key generado</li>
-          <li>En Vercel: <strong>Settings → Environment Variables</strong> → agregar <code style={{ fontFamily: 'IBM Plex Mono, monospace' }}>CTB_API_KEY</code></li>
+          <li>Ir a <strong>Configuración → API</strong></li>
+          <li>Copiá el <strong>Client ID</strong> y el <strong>Client Secret</strong></li>
+          <li>En Vercel: <strong>Settings → Environment Variables</strong> → agregar <code style={{ fontFamily: 'IBM Plex Mono, monospace' }}>CTB_CLIENT_ID</code> y <code style={{ fontFamily: 'IBM Plex Mono, monospace' }}>CTB_CLIENT_SECRET</code></li>
           <li>Redesplegá la app y hacé click en <strong>Probar</strong> arriba</li>
         </ol>
       </div>
