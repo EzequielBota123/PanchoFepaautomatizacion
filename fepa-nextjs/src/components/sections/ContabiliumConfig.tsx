@@ -12,6 +12,7 @@ type SyncResult = {
   results: Record<string, number>
   errors: string[]
   synced_at: string
+  [key: string]: unknown
 }
 
 export function ContabiliumConfig() {
@@ -40,16 +41,30 @@ export function ContabiliumConfig() {
   const sync = async () => {
     if (!confirm(`¿Sincronizar desde Contabilium?\nMódulos: ${modulos.join(', ')}`)) return
     setSyncing(true)
+    const results: Record<string, number> = {}
+    const errors: string[] = []
+
     try {
-      const res = await fetch('/api/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ modulos }),
-      })
-      const data = await res.json()
-      setLastSync(data)
-    } catch {
-      alert('Error al sincronizar')
+      for (const modulo of modulos) {
+        // Sync de a una página para evitar timeout de Vercel (10s)
+        let page = 1
+        while (true) {
+          const res  = await fetch('/api/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ modulo, page }),
+          })
+          const data = await res.json()
+          if (!res.ok || data.error) { errors.push(`${modulo} p.${page}: ${data.error}`); break }
+          results[modulo] = (results[modulo] || 0) + (data.count || 0)
+          if (page >= data.totalPages) break
+          page++
+        }
+      }
+      setLastSync({ ok: true, results, errors, synced_at: new Date().toISOString() })
+    } catch (e) {
+      errors.push(String(e))
+      setLastSync({ ok: false, results, errors, synced_at: new Date().toISOString() })
     }
     setSyncing(false)
   }
