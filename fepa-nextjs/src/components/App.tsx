@@ -14,6 +14,12 @@ import { Ordenes } from './sections/Ordenes'
 import { Facturas } from './sections/Facturas'
 import { NotasCredito } from './sections/NotasCredito'
 import { Deudores } from './sections/Deudores'
+import { Presupuestos } from './sections/Presupuestos'
+import { Proveedores } from './sections/Proveedores'
+import { Compras } from './sections/Compras'
+import { Remitos } from './sections/Remitos'
+import { CuentaCorriente } from './sections/CuentaCorriente'
+import { ContabiliumConfig } from './sections/ContabiliumConfig'
 
 // ── App Context ──────────────────────────────────────────────────────────────
 interface AppCtx {
@@ -33,17 +39,23 @@ export const AppContext = createContext<AppCtx>({} as AppCtx)
 export const useApp = () => useContext(AppContext)
 
 const SECTIONS: Record<string, string> = {
-  dashboard: 'Dashboard',
-  cobranzas: 'Semáforo de Cobranzas',
-  flujo:     'Flujo de Caja',
-  alertas:   'Alertas de Seguimiento',
-  clientes:  'Clientes',
-  pipeline:  'Pipeline de Ventas',
-  ia:        'Asistente IA',
-  ordenes:   'Órdenes de Venta',
-  facturas:  'Facturas',
-  nc:        'Notas de Crédito',
-  deudores:  'Registro de Deudores',
+  dashboard:   'Dashboard',
+  cobranzas:   'Semáforo de Cobranzas',
+  flujo:       'Flujo de Caja',
+  alertas:     'Alertas de Seguimiento',
+  clientes:    'Clientes',
+  pipeline:    'Pipeline de Ventas',
+  ia:          'Asistente IA',
+  ordenes:     'Órdenes de Venta',
+  facturas:    'Facturas',
+  nc:          'Notas de Crédito',
+  deudores:    'Registro de Deudores',
+  presupuestos:'Presupuestos',
+  proveedores: 'Proveedores',
+  compras:     'Compras / Gastos',
+  remitos:     'Remitos',
+  cc:          'Cuenta Corriente',
+  contabilium: 'Integración Contabilium',
 }
 
 export default function App() {
@@ -73,9 +85,7 @@ export default function App() {
   // ── CRUD clientes ──
   const updateCliente = async (id: number, data: Partial<Cliente>) => {
     await fetch(`/api/clientes/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
     })
     setClientes(prev => prev.map(c => c.id === id ? { ...c, ...data } : c))
   }
@@ -88,9 +98,7 @@ export default function App() {
 
   const createCliente = async (data: Partial<Cliente>) => {
     const res = await fetch('/api/clientes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
     })
     const nuevo = await res.json()
     setClientes(prev => [...prev, nuevo])
@@ -99,9 +107,7 @@ export default function App() {
   // ── CRUD facturas ──
   const updateFactura = async (id: number, data: Partial<Factura>) => {
     await fetch(`/api/facturas/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
     })
     setFacturas(prev => prev.map(f => f.id === id ? { ...f, ...data } : f))
     if (data.estado === 'cobrada') {
@@ -131,9 +137,7 @@ export default function App() {
 
   const createFactura = async (data: Partial<Factura>): Promise<Factura> => {
     const res = await fetch('/api/facturas', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
     })
     const nueva = await res.json()
     setFacturas(prev => [...prev, nueva])
@@ -153,18 +157,24 @@ export default function App() {
 
   const renderSection = () => {
     switch (section) {
-      case 'dashboard': return <Dashboard />
-      case 'cobranzas': return <Cobranzas />
-      case 'flujo':     return <FlujoEfectivo />
-      case 'alertas':   return <Alertas />
-      case 'clientes':  return <Clientes />
-      case 'pipeline':  return <Pipeline />
-      case 'ia':        return <AsistenteIA />
-      case 'ordenes':   return <Ordenes />
-      case 'facturas':  return <Facturas />
-      case 'nc':        return <NotasCredito />
-      case 'deudores':  return <Deudores />
-      default:          return <Dashboard />
+      case 'dashboard':    return <Dashboard />
+      case 'cobranzas':   return <Cobranzas />
+      case 'flujo':       return <FlujoEfectivo />
+      case 'alertas':     return <Alertas />
+      case 'clientes':    return <Clientes />
+      case 'pipeline':    return <Pipeline />
+      case 'ia':          return <AsistenteIA />
+      case 'ordenes':     return <Ordenes />
+      case 'facturas':    return <Facturas />
+      case 'nc':          return <NotasCredito />
+      case 'deudores':    return <Deudores />
+      case 'presupuestos':return <Presupuestos />
+      case 'proveedores': return <Proveedores />
+      case 'compras':     return <Compras />
+      case 'remitos':     return <Remitos />
+      case 'cc':          return <CuentaCorriente />
+      case 'contabilium': return <ContabiliumConfig />
+      default:            return <Dashboard />
     }
   }
 

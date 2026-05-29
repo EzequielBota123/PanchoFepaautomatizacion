@@ -187,6 +187,131 @@ export interface ConfigEmpresa {
   telefono:      string
 }
 
+// ── PRESUPUESTO ────────────────────────────────────────────────────────────────
+export type EstadoPresupuesto = 'borrador' | 'enviado' | 'aceptado' | 'rechazado' | 'vencido' | 'convertido'
+
+export interface Presupuesto {
+  id:             number
+  nro:            string
+  cliente_id:     number | null
+  cliente_nombre: string
+  fecha:          string
+  fecha_vto:      string | null
+  estado:         EstadoPresupuesto
+  subtotal:       number
+  descuento:      number
+  total:          number
+  obs:            string
+  vendedor:       string
+  cond_venta:     string
+  factura_id:     number | null
+  ctb_id:         number | null
+  items?:         ItemPresupuesto[]
+  created_at?:    string
+}
+
+export interface ItemPresupuesto {
+  id:              number
+  presupuesto_id:  number
+  producto_id:     number | null
+  descripcion:     string
+  cantidad:        number
+  precio_unitario: number
+  descuento_pct:   number
+  subtotal:        number
+}
+
+// ── PROVEEDOR ──────────────────────────────────────────────────────────────────
+export interface Proveedor {
+  id:           number
+  razon_social: string
+  cuit:         string
+  email:        string
+  telefono:     string
+  direccion:    string
+  ciudad:       string
+  provincia:    string
+  cond_iva:     string
+  activo:       boolean
+  notas:        string
+  ctb_id:       number | null
+  created_at?:  string
+}
+
+// ── COMPRA ─────────────────────────────────────────────────────────────────────
+export type TipoCompra   = 'factura' | 'recibo' | 'ticket' | 'nc'
+export type EstadoCompra = 'pendiente' | 'pagada'
+
+export interface Compra {
+  id:               number
+  nro:              string
+  proveedor_id:     number | null
+  proveedor_nombre: string
+  fecha:            string
+  fecha_vto:        string | null
+  tipo:             TipoCompra
+  estado:           EstadoCompra
+  subtotal:         number
+  iva:              number
+  total:            number
+  metodo_pago:      string
+  obs:              string
+  ctb_id:           number | null
+  items?:           ItemCompra[]
+  created_at?:      string
+}
+
+export interface ItemCompra {
+  id:              number
+  compra_id:       number
+  producto_id:     number | null
+  descripcion:     string
+  cantidad:        number
+  precio_unitario: number
+  subtotal:        number
+}
+
+// ── REMITO ─────────────────────────────────────────────────────────────────────
+export type EstadoRemito = 'pendiente' | 'entregado' | 'anulado'
+
+export interface Remito {
+  id:             number
+  nro:            string
+  ov_id:          number | null
+  cliente_id:     number | null
+  cliente_nombre: string
+  fecha:          string
+  deposito_id:    number | null
+  estado:         EstadoRemito
+  obs:            string
+  ctb_id:         number | null
+  items?:         ItemRemito[]
+  created_at?:    string
+}
+
+export interface ItemRemito {
+  id:          number
+  remito_id:   number
+  producto_id: number | null
+  variante_id: number | null
+  descripcion: string
+  cantidad:    number
+}
+
+// ── MOVIMIENTO CUENTA CORRIENTE ────────────────────────────────────────────────
+export type TipoMovCC = 'factura' | 'cobro' | 'nc' | 'nd' | 'ajuste'
+
+export interface MovimientoCC {
+  id:          number
+  tipo:        TipoMovCC
+  fecha:       string
+  descripcion: string
+  debe:        number
+  haber:       number
+  saldo:       number
+  ref_id:      number | null
+}
+
 // ── EXCEL IMPORT ───────────────────────────────────────────────────────────
 export interface FilaImportOV {
   fila:           number
