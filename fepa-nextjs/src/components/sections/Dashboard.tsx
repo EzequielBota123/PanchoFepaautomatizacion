@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import type { Cliente, Factura } from '@/lib/types'
+import type { Cliente, Factura, OrdenVenta } from '@/lib/types'
 import { fmt, fmtDate, diasHasta } from '@/lib/utils'
 
 const fmtPeso = fmt
@@ -8,17 +8,20 @@ const fmtPeso = fmt
 export function Dashboard() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [facturas, setFacturas] = useState<Factura[]>([])
+  const [ordenes, setOrdenes]   = useState<OrdenVenta[]>([])
   const [loading, setLoading]   = useState(true)
 
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [rc, rf] = await Promise.all([
+      const [rc, rf, ro] = await Promise.all([
         fetch('/api/clientes?activo=true').then(r => r.json()),
         fetch('/api/facturas').then(r => r.json()),
+        fetch('/api/ordenes').then(r => r.json()),
       ])
       if (Array.isArray(rc)) setClientes(rc)
       if (Array.isArray(rf)) setFacturas(rf)
+      if (Array.isArray(ro)) setOrdenes(ro)
     } catch (e) {
       console.error('Dashboard load error:', e)
     } finally {
@@ -43,6 +46,18 @@ export function Dashboard() {
   const totalVence30 = vence30.reduce((s, f) => s + f.total, 0)
   const totalCobrado = cobradas.reduce((s, f) => s + f.total, 0)
 
+  const ovsPendientes   = ordenes.filter(o => o.estado === 'pendiente')
+  const totalOVPend     = ovsPendientes.reduce((s, o) => s + o.total, 0)
+  const topOVClientes   = Object.values(
+    ovsPendientes.reduce((acc, o) => {
+      const key = o.cliente_nombre
+      if (!acc[key]) acc[key] = { nombre: key, total: 0, count: 0 }
+      acc[key].total += o.total
+      acc[key].count++
+      return acc
+    }, {} as Record<string, { nombre: string; total: number; count: number }>)
+  ).sort((a, b) => b.total - a.total).slice(0, 5)
+
   const conSaldo    = clientes.filter(c => c.saldo_deudor > 0)
   const totalSaldo  = conSaldo.reduce((s, c) => s + c.saldo_deudor, 0)
   const conAlerta   = clientes.filter(c => c.limite_credito > 0 && c.saldo_deudor >= c.limite_credito)
@@ -60,10 +75,10 @@ export function Dashboard() {
     <div>
       {/* ── Stats ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 24 }}>
-        <StatBox label="Saldo Deudor Total"   value={fmtPeso(totalSaldo)}   sub={`${conSaldo.length} clientes`}       color="#ef4444" />
-        <StatBox label="Facturas Pendientes"   value={fmtPeso(totalPend)}    sub={`${pendientes.length} facturas`}     color="#f59e0b" />
-        <StatBox label="Vencen en 7 días"      value={fmtPeso(totalVence7)}  sub={`${vence7.length} facturas`}         color="#f97316" />
-        <StatBox label="Cobrado (total)"       value={fmtPeso(totalCobrado)} sub={`${cobradas.length} cobradas`}       color="#00b37e" />
+        <StatBox label="OVs Pendientes"        value={fmtPeso(totalOVPend)}  sub={`${ovsPendientes.length} órdenes`}  color="#c8440a" />
+        <StatBox label="Facturas Pendientes"   value={fmtPeso(totalPend)}    sub={`${pendientes.length} facturas`}    color="#f59e0b" />
+        <StatBox label="Vencen en 7 días"      value={fmtPeso(totalVence7)}  sub={`${vence7.length} facturas`}        color="#f97316" />
+        <StatBox label="Cobrado (total)"       value={fmtPeso(totalCobrado)} sub={`${cobradas.length} cobradas`}      color="#00b37e" />
       </div>
 
       {/* ── Alerts banner ── */}
@@ -133,6 +148,44 @@ export function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* ── Top clientes OV pendiente ── */}
+      {topOVClientes.length > 0 && (
+        <div style={{ ...CARD, marginBottom: 16 }}>
+          <div style={CARD_HEADER}><span style={{ fontWeight: 700 }}>Top Clientes — OVs Pendientes</span><span style={{ fontFamily: 'monospace', fontSize: 12 }}>{fmtPeso(totalOVPend)}</span></div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: 'var(--bg-primary)' }}>
+                  {['Cliente','OVs','Total pendiente','% del total'].map(h => (
+                    <th key={h} style={{ padding: '8px 14px', fontWeight: 600, fontSize: 12, color: 'var(--text-muted)', textAlign: 'left' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {topOVClientes.map((c, i) => {
+                  const pct = totalOVPend > 0 ? Math.round((c.total / totalOVPend) * 100) : 0
+                  return (
+                    <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td style={{ padding: '8px 14px', fontWeight: 600 }}>{c.nombre}</td>
+                      <td style={{ padding: '8px 14px', textAlign: 'center', color: 'var(--text-muted)' }}>{c.count}</td>
+                      <td style={{ padding: '8px 14px', fontFamily: 'monospace', fontWeight: 700, color: '#c8440a' }}>{fmtPeso(c.total)}</td>
+                      <td style={{ padding: '8px 14px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ flex: 1, height: 5, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${pct}%`, background: '#c8440a' }} />
+                          </div>
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 32 }}>{pct}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* ── Top deudores ── */}
       <div style={{ ...CARD, marginBottom: 16 }}>

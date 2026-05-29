@@ -48,6 +48,23 @@ export function Ordenes() {
   const [facForm, setFacForm]           = useState(emptyFacForm())
   const [facturando, setFacturando]     = useState(false)
 
+  // Detail modal
+  const [detailOV, setDetailOV]   = useState<OrdenVenta | null>(null)
+  const [detailData, setDetailData] = useState<Record<string, unknown> | null>(null)
+  const [loadingDetail, setLoadingDetail] = useState(false)
+
+  const openDetail = async (o: OrdenVenta) => {
+    setDetailOV(o)
+    setDetailData(null)
+    setLoadingDetail(true)
+    try {
+      const res  = await fetch(`/api/ordenes/${o.id}/detalle`)
+      const data = await res.json()
+      setDetailData(data)
+    } catch { /* sin detalle */ }
+    finally { setLoadingDetail(false) }
+  }
+
   // Import modal
   const [showImport, setShowImport]       = useState(false)
   const [importLoading, setImportLoading] = useState(false)
@@ -343,6 +360,9 @@ export function Ordenes() {
                     </td>
                     <td style={TD}>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'nowrap' }}>
+                        <button className="btn btn-secondary" style={{ padding: '3px 8px', fontSize: 11, whiteSpace: 'nowrap' }} onClick={() => openDetail(o)}>
+                          🔍 Ver
+                        </button>
                         {o.estado === 'pendiente' && (
                           <button
                             className="btn btn-secondary"
@@ -482,6 +502,136 @@ export function Ordenes() {
               <button className="btn btn-primary" onClick={confirmarFacturar} disabled={facturando}>
                 {facturando ? 'Emitiendo…' : `✅ Emitir Factura ${facForm.tipo} · ${fmt(ovAFacturar.total)}`}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════ DETALLE MODAL ══════════════════════════════════════════ */}
+      {detailOV && (
+        <div style={OVERLAY} onClick={() => setDetailOV(null)}>
+          <div style={{ ...MODAL_BOX, maxWidth: 720 }} onClick={e => e.stopPropagation()}>
+            <div style={MODAL_HDR}>
+              <div>
+                <h3 style={{ margin: 0, fontWeight: 700, fontSize: 20 }}>OV {detailOV.nro}</h3>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 3 }}>{detailOV.cliente_nombre} · {fmt(detailOV.total)}</div>
+              </div>
+              <button onClick={() => setDetailOV(null)} style={CLOSE_BTN}>✕</button>
+            </div>
+
+            {loadingDetail && <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>Cargando detalle…</div>}
+
+            {!loadingDetail && detailData && (() => {
+              const ov    = detailData.ov as Record<string, unknown>
+              const ctb   = detailData.ctbDetalle as Record<string, unknown> | null
+              const cli   = ov?.clientes as Record<string, unknown> | null
+              const items = (ctb?.Items || []) as Record<string, unknown>[]
+
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {/* Cliente */}
+                  {cli && (
+                    <div style={{ background: 'var(--bg-primary)', borderRadius: 8, padding: '14px 16px', border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Cliente</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 24px', fontSize: 13 }}>
+                        {[
+                          ['Razón Social', cli.razon_social],
+                          ['CUIT', cli.cuit || '—'],
+                          ['Email', cli.email || '—'],
+                          ['Teléfono', cli.telefono || cli.whatsapp || '—'],
+                          ['Ciudad', `${cli.ciudad || ''} ${cli.provincia || ''}`.trim() || '—'],
+                          ['Cond. IVA', cli.cond_iva || '—'],
+                          ['Saldo deudor', fmt(Number(cli.saldo_deudor) || 0)],
+                          ['Límite crédito', cli.limite_credito ? fmt(Number(cli.limite_credito)) : '—'],
+                        ].map(([k, v]) => (
+                          <div key={String(k)}>
+                            <span style={{ color: 'var(--text-muted)' }}>{String(k)}: </span>
+                            <strong>{String(v)}</strong>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Info OV */}
+                  <div style={{ background: 'var(--bg-primary)', borderRadius: 8, padding: '14px 16px', border: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Orden de Venta</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 24px', fontSize: 13 }}>
+                      {[
+                        ['Número', detailOV.nro],
+                        ['Estado', detailOV.estado],
+                        ['Fecha', fmtDate(detailOV.fecha)],
+                        ['Total', fmt(detailOV.total)],
+                        ['Vendedor', detailOV.vendedor || '—'],
+                        ['Depósito', String(ctb?.Deposito || '—')],
+                      ].map(([k, v]) => (
+                        <div key={String(k)}>
+                          <span style={{ color: 'var(--text-muted)' }}>{k}: </span>
+                          <strong>{String(v)}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Ítems */}
+                  {items.length > 0 && (
+                    <div style={{ background: 'var(--bg-primary)', borderRadius: 8, border: '1px solid var(--border)', overflow: 'hidden' }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1, padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+                        Artículos ({items.length})
+                      </div>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                        <thead>
+                          <tr style={{ background: 'var(--bg-secondary)' }}>
+                            {['Código','Artículo','Cant.','Precio Unit.','IVA%','Subtotal'].map(h => (
+                              <th key={h} style={{ ...TH, padding: '8px 12px' }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {items.map((it, i) => {
+                            const cant     = Number(it.Cantidad || 0)
+                            const precio   = Number(it.PrecioUnitario || 0)
+                            const boni     = Number(it.Bonificacion || 0)
+                            const subtotal = cant * precio * (1 - boni / 100)
+                            return (
+                              <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                                <td style={{ ...TD, padding: '8px 12px', fontFamily: 'monospace', fontSize: 11, color: 'var(--text-muted)' }}>{String(it.Codigo || '—')}</td>
+                                <td style={{ ...TD, padding: '8px 12px', fontWeight: 600, maxWidth: 240 }}>{String(it.Concepto || '—')}</td>
+                                <td style={{ ...TD, padding: '8px 12px', textAlign: 'center' }}>{cant}</td>
+                                <td style={{ ...TD, padding: '8px 12px', fontFamily: 'monospace' }}>{fmt(precio)}</td>
+                                <td style={{ ...TD, padding: '8px 12px', textAlign: 'center', color: 'var(--text-muted)' }}>{String(it.Iva || 21)}%</td>
+                                <td style={{ ...TD, padding: '8px 12px', fontFamily: 'monospace', fontWeight: 700 }}>{fmt(subtotal)}</td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                        <tfoot>
+                          <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--bg-secondary)' }}>
+                            <td colSpan={5} style={{ ...TD, padding: '10px 12px', fontWeight: 700, textAlign: 'right' }}>TOTAL</td>
+                            <td style={{ ...TD, padding: '10px 12px', fontFamily: 'monospace', fontWeight: 800, fontSize: 15 }}>{fmt(detailOV.total)}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
+
+                  {items.length === 0 && !ctb && (
+                    <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)', fontSize: 13 }}>
+                      Sin detalle de artículos disponible (OV no sincronizada desde Contabilium)
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+
+            <div style={{ ...MODAL_FTR, justifyContent: 'space-between' }}>
+              {detailOV.estado === 'pendiente' && (
+                <button className="btn btn-secondary" style={{ color: '#1a4a7a', border: '1px solid rgba(26,74,122,0.35)' }}
+                  onClick={() => { setDetailOV(null); abrirFacturar(detailOV) }}>
+                  📄 Facturar esta OV
+                </button>
+              )}
+              <button className="btn btn-secondary" onClick={() => setDetailOV(null)}>Cerrar</button>
             </div>
           </div>
         </div>

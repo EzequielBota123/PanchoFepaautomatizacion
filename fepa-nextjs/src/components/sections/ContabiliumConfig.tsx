@@ -3,7 +3,8 @@ import { useState, useEffect } from 'react'
 
 const MODULOS = [
   { key: 'clientes',    label: 'Clientes',          desc: 'Razón social, CUIT, condición IVA, contacto' },
-  { key: 'ordenes',     label: 'Órdenes de Venta',  desc: 'Últimos 365 días — estado Pendiente/Finalizada' },
+  { key: 'ordenes',     label: 'Órdenes de Venta',  desc: 'Últimos 365 días — vincula automáticamente clientes' },
+  { key: 'facturas',    label: 'Facturas',           desc: 'Comprobantes emitidos ligados a las OVs' },
   { key: 'proveedores', label: 'Proveedores',        desc: 'ABM completo de proveedores' },
 ]
 
@@ -19,7 +20,7 @@ export function ContabiliumConfig() {
   const [connected, setConnected]       = useState<boolean | null>(null)
   const [testing, setTesting]           = useState(false)
   const [syncing, setSyncing]           = useState(false)
-  const [modulos, setModulos]           = useState<string[]>(['clientes', 'ordenes', 'proveedores'])
+  const [modulos, setModulos]           = useState<string[]>(['clientes', 'ordenes', 'facturas', 'proveedores'])
   const [lastSync, setLastSync]         = useState<SyncResult | null>(null)
   const [connError, setConnError]       = useState('')
 
