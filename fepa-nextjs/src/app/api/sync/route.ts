@@ -224,8 +224,8 @@ async function syncPageData(modulo: string, page: number): Promise<{ count: numb
 
   // ── FACTURAS (desde IDComprobante de OVs) ───────────────────
   if (modulo === 'facturas') {
-    // Batch de 5 por request para no hacer timeout en Vercel Hobby (10s limit)
-    const BATCH = 5
+    // Batch de 3, llamadas a CTB en paralelo → ~2s por request (dentro del 10s de Vercel Hobby)
+    const BATCH = 3
     const offset = (page - 1) * BATCH
     const { data: ovs, count: total } = await sb()
       .from('ordenes_venta')
@@ -237,49 +237,60 @@ async function syncPageData(modulo: string, page: number): Promise<{ count: numb
     if (!ovs?.length) return { count: 0, totalPages: 1 }
 
     const totalPages = Math.ceil((total || 0) / BATCH) || 1
-    let count = 0
 
-    for (const ov of ovs) {
-      try {
-        const { data: existing } = await sb()
-          .from('facturas')
-          .select('id')
-          .eq('ctb_id', ov.ctb_comprobante_id)
-          .maybeSingle()
-        if (existing) { count++; continue }
+    // Chequear cuáles ya existen en un solo query
+    const ctbIds = ovs.map(o => o.ctb_comprobante_id)
+    const { data: yaExisten } = await sb()
+      .from('facturas')
+      .select('ctb_id')
+      .in('ctb_id', ctbIds)
+    const yaIds = new Set((yaExisten || []).map((f: { ctb_id: number }) => f.ctb_id))
 
-        const ctbF = await ctbGet(`/api/comprobantes/GetById?id=${ov.ctb_comprobante_id}`)
-        if (!ctbF?.Numero) { count++; continue }
+    const nuevas = ovs.filter(o => !yaIds.has(o.ctb_comprobante_id))
 
-        const totalBruto = parseMoney(ctbF.ImporteTotalBruto)  // neto sin IVA
-        const totalNeto  = parseMoney(ctbF.ImporteTotalNeto)   // total con IVA
-        const iva21      = Math.max(0, totalNeto - totalBruto)
+    if (!nuevas.length) return { count: ovs.length, totalPages }
 
-        const facturaRow = {
-          nro:            ctbF.Numero,
-          tipo:           ctbF.TipoFc?.includes('A') ? 'A' : ctbF.TipoFc?.includes('C') ? 'C' : 'B',
-          punto_venta:    ctbF.PuntoVenta || 1,
-          cliente_id:     ov.cliente_id,
-          cliente_nombre: ctbF.RazonSocial || ov.cliente_nombre || '',
-          fecha:          ctbF.FechaEmision?.split('T')[0] || new Date().toISOString().split('T')[0],
-          fecha_vto:      ctbF.FechaVencimiento?.split('T')[0] || null,
-          subtotal:       totalBruto,
-          iva_21:         iva21,
-          total:          totalNeto,
-          cae:            ctbF.Cae || '',
-          estado:         parseMoney(ctbF.Saldo) > 0 ? 'pendiente' : 'cobrada',
-          obs:            ctbF.Observaciones || '',
-          cond_venta:     ctbF.CondicionVenta || '',
-          ctb_id:         ov.ctb_comprobante_id,
-        }
+    // Traer todos los comprobantes en PARALELO desde Contabilium
+    const ctbResults = await Promise.allSettled(
+      nuevas.map(ov => ctbGet(`/api/comprobantes/GetById?id=${ov.ctb_comprobante_id}`)
+        .then(data => ({ ov, data }))
+      )
+    )
 
-        // insert simple — ya chequeamos que no existe antes
-        await sb().from('facturas').insert(facturaRow)
-        count++
-      } catch { count++ }
+    const toInsert = []
+    for (const res of ctbResults) {
+      if (res.status === 'rejected') continue
+      const { ov, data: ctbF } = res.value
+      if (!ctbF?.Numero) continue
+
+      const totalBruto = parseMoney(ctbF.ImporteTotalBruto)
+      const totalNeto  = parseMoney(ctbF.ImporteTotalNeto)
+      const iva21      = Math.max(0, totalNeto - totalBruto)
+
+      toInsert.push({
+        nro:            ctbF.Numero,
+        tipo:           ctbF.TipoFc?.includes('A') ? 'A' : ctbF.TipoFc?.includes('C') ? 'C' : 'B',
+        punto_venta:    ctbF.PuntoVenta || 1,
+        cliente_id:     ov.cliente_id,
+        cliente_nombre: ctbF.RazonSocial || ov.cliente_nombre || '',
+        fecha:          ctbF.FechaEmision?.split('T')[0] || new Date().toISOString().split('T')[0],
+        fecha_vto:      ctbF.FechaVencimiento?.split('T')[0] || null,
+        subtotal:       totalBruto,
+        iva_21:         iva21,
+        total:          totalNeto,
+        cae:            ctbF.Cae || '',
+        estado:         parseMoney(ctbF.Saldo) > 0 ? 'pendiente' : 'cobrada',
+        obs:            ctbF.Observaciones || '',
+        cond_venta:     ctbF.CondicionVenta || '',
+        ctb_id:         ov.ctb_comprobante_id,
+      })
     }
 
-    return { count, totalPages }
+    if (toInsert.length) {
+      await sb().from('facturas').insert(toInsert)
+    }
+
+    return { count: toInsert.length, totalPages }
   }
 
   // ── PROVEEDORES ─────────────────────────────────────────────
