@@ -2,11 +2,9 @@
 import { useState, useEffect } from 'react'
 
 const MODULOS = [
-  { key: 'clientes',      label: 'Clientes',      desc: 'Sincroniza razón social, CUIT, condición IVA' },
-  { key: 'facturas',      label: 'Comprobantes',  desc: 'Facturas A/B/C de los últimos 365 días' },
-  { key: 'presupuestos',  label: 'Presupuestos',  desc: 'Presupuestos con estado y montos' },
-  { key: 'proveedores',   label: 'Proveedores',   desc: 'ABM de proveedores' },
-  { key: 'remitos',       label: 'Remitos',       desc: 'Remitos de entrega' },
+  { key: 'clientes',    label: 'Clientes',          desc: 'Razón social, CUIT, condición IVA, contacto' },
+  { key: 'ordenes',     label: 'Órdenes de Venta',  desc: 'Últimos 365 días — estado Pendiente/Finalizada' },
+  { key: 'proveedores', label: 'Proveedores',        desc: 'ABM completo de proveedores' },
 ]
 
 type SyncResult = {
@@ -20,7 +18,7 @@ export function ContabiliumConfig() {
   const [connected, setConnected]       = useState<boolean | null>(null)
   const [testing, setTesting]           = useState(false)
   const [syncing, setSyncing]           = useState(false)
-  const [modulos, setModulos]           = useState<string[]>(MODULOS.map(m => m.key))
+  const [modulos, setModulos]           = useState<string[]>(['clientes', 'ordenes', 'proveedores'])
   const [lastSync, setLastSync]         = useState<SyncResult | null>(null)
   const [connError, setConnError]       = useState('')
 

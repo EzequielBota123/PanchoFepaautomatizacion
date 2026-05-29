@@ -14,7 +14,6 @@ let cachedToken: { token: string; expiresAt: number } | null = null
 
 async function getToken(): Promise<string> {
   if (cachedToken && Date.now() < cachedToken.expiresAt) return cachedToken.token
-
   const res = await fetch(`${CTB_BASE}/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -25,245 +24,177 @@ async function getToken(): Promise<string> {
     }),
     signal: AbortSignal.timeout(15000),
   })
-  if (!res.ok) throw new Error(`CTB auth ${res.status}: ${await res.text()}`)
-  const data = await res.json()
-  const token = data.access_token
+  if (!res.ok) throw new Error(`Auth: ${await res.text()}`)
+  const data      = await res.json()
   const expiresIn = data.expires_in || 3600
-  cachedToken = { token, expiresAt: Date.now() + (expiresIn - 60) * 1000 }
-  return token
+  cachedToken     = { token: data.access_token, expiresAt: Date.now() + (expiresIn - 60) * 1000 }
+  return cachedToken.token
 }
 
-async function ctbFetch(path: string, opts: RequestInit = {}) {
+async function ctbGet(path: string) {
   const token = await getToken()
-  const url   = `${CTB_BASE}${path}`
-  const res   = await fetch(url, {
-    ...opts,
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Accept': 'application/json',
-      ...(opts.headers || {}),
-    },
+  const res   = await fetch(`${CTB_BASE}${path}`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
     signal: AbortSignal.timeout(20000),
   })
-  if (!res.ok) throw new Error(`CTB ${res.status}: ${await res.text()}`)
+  if (!res.ok) throw new Error(`CTB ${res.status} ${path}: ${await res.text()}`)
   return res.json()
 }
 
-async function paginateAll(path: string) {
-  const results = []
-  let page = 1
+// Pagina automáticamente usando la estructura {Items, TotalPage} de Contabilium
+async function paginateSearch(path: string, extraParams = '') {
+  const all = []
+  let page  = 1
   while (true) {
-    const sep = path.includes('?') ? '&' : '?'
-    const data = await ctbFetch(`${path}${sep}page=${page}&pageSize=100`)
-    // Contabilium puede devolver el array directamente o dentro de Items/Data
-    const items = Array.isArray(data)
-      ? data
-      : data?.Items || data?.items || data?.Data || data?.data || data?.results || []
+    const data  = await ctbGet(`${path}&page=${page}&pageSize=100${extraParams}`)
+    const items = data?.Items || data?.items || []
     if (!items.length) break
-    results.push(...items)
+    all.push(...items)
     page++
-    if (items.length < 100) break
+    if (page > (data.TotalPage || 1)) break
   }
-  return results
+  return all
 }
 
-// POST /api/sync
+// Parsea "540.000,00" → 540000
+function parseMoney(val: string | number): number {
+  if (typeof val === 'number') return val
+  if (!val) return 0
+  return parseFloat(String(val).replace(/\./g, '').replace(',', '.')) || 0
+}
+
+// Parsea "27/05/2026" → "2026-05-27"
+function parseDate(val: string): string | null {
+  if (!val) return null
+  const m = val.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`
+  if (val.includes('T')) return val.split('T')[0]
+  return val || null
+}
+
+// ── POST /api/sync ────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   if (!CTB_CLIENT_ID || !CTB_CLIENT_SECRET) {
     return NextResponse.json({ error: 'CTB_CLIENT_ID y CTB_CLIENT_SECRET no configuradas' }, { status: 400 })
   }
 
-  let modulos: string[] = ['clientes', 'facturas', 'presupuestos', 'proveedores', 'remitos']
-  try {
-    const body = await req.json()
-    if (body.modulos) modulos = body.modulos
-  } catch { /* no body */ }
+  let modulos: string[] = ['clientes', 'ordenes', 'proveedores']
+  try { const b = await req.json(); if (b.modulos) modulos = b.modulos } catch { /* sin body */ }
 
-  const results: Record<string, number | string> = {}
+  const results: Record<string, number> = {}
   const errors: string[] = []
 
   // ── CLIENTES ──────────────────────────────────────────────
   if (modulos.includes('clientes')) {
     try {
-      const items = await paginateAll('/clientes?condicion=')
-      let count = 0
+      const items = await paginateSearch('/api/clientes/Search?razonSocial=')
+      let count   = 0
       for (const c of items) {
-        const nombre = c.RazonSocial || c.razonSocial || c.Nombre || ''
+        const nombre = (c.RazonSocial || '').trim()
         if (!nombre) continue
-        const ctb_id = c.Id || c.id
-        const clienteData = {
-          razon_social:  nombre,
-          cuit:          c.NroDocumento || c.nroDocumento || '',
-          cond_iva:      c.CondicionIVA || c.condicionIva || 'Responsable Inscripto',
-          email:         c.Email || c.email || '',
-          telefono:      c.Telefono || c.telefono || '',
-          direccion:     c.Domicilio || c.domicilio || '',
-          ciudad:        c.Localidad || c.localidad || '',
-          provincia:     c.Provincia || c.provincia || '',
+        const ctb_id = c.Id
+        const row = {
+          razon_social: nombre,
+          cuit:         c.NroDoc || c.NroDocumento || '',
+          cond_iva:     mapCondIva(c.CondicionIva || c.CondicionIVA || ''),
+          email:        c.Email || '',
+          telefono:     c.Telefono || '',
+          direccion:    c.Domicilio || '',
+          ciudad:       c.Ciudad || '',
+          provincia:    c.Provincia || '',
           ctb_id,
+          activo:       true,
         }
-        const { data: ex } = await sb().from('clientes').select('id').eq('ctb_id', ctb_id).limit(1).maybeSingle()
+        const { data: ex } = await sb().from('clientes').select('id').eq('ctb_id', ctb_id).maybeSingle()
         if (ex) {
-          await sb().from('clientes').update(clienteData).eq('id', ex.id)
+          await sb().from('clientes').update(row).eq('id', ex.id)
         } else {
-          const { data: exNombre } = await sb().from('clientes').select('id').ilike('razon_social', nombre).limit(1).maybeSingle()
-          if (exNombre) {
-            await sb().from('clientes').update({ ...clienteData }).eq('id', exNombre.id)
-          } else {
-            await sb().from('clientes').insert({ ...clienteData, activo: true })
-          }
+          const { data: exN } = await sb().from('clientes').select('id').ilike('razon_social', nombre).maybeSingle()
+          if (exN) await sb().from('clientes').update({ ctb_id }).eq('id', exN.id)
+          else await sb().from('clientes').insert(row)
         }
         count++
       }
       results.clientes = count
-    } catch (e: unknown) {
-      errors.push(`Clientes: ${(e as Error).message}`)
-    }
+    } catch (e: unknown) { errors.push(`Clientes: ${(e as Error).message}`) }
   }
 
-  // ── FACTURAS / COMPROBANTES ────────────────────────────────
-  if (modulos.includes('facturas')) {
+  // ── ÓRDENES DE VENTA ──────────────────────────────────────
+  if (modulos.includes('ordenes')) {
     try {
-      const items = await paginateAll('/comprobantes?condicion=&periodo=365')
+      const hoy  = new Date().toISOString().split('T')[0]
+      const hace1 = new Date(Date.now() - 365 * 86400000).toISOString().split('T')[0]
+      const items = await paginateSearch(
+        `/api/OrdenesVenta/Search?razonSocial=&fechaDesde=${hace1}&fechaHasta=${hoy}`
+      )
       let count = 0
-      for (const f of items) {
-        const nro    = f.Numero || f.numero || f.NroComprobante || ''
-        const ctb_id = f.Id || f.id
-        if (!nro) continue
-        const factData = {
+      for (const o of items) {
+        const ctb_id = o.ID
+        const nro    = o.NumeroOrden || String(ctb_id)
+        const total  = parseMoney(o.Total)
+        const estado = mapEstadoOV(o.Estado || '')
+        const fecha  = parseDate(o.FechaCreacion)
+
+        const row = {
           nro,
-          tipo:           f.Tipo === 1 ? 'A' : f.Tipo === 6 ? 'B' : 'C',
-          cliente_nombre: f.RazonSocial || f.razonSocial || '',
-          fecha:          f.Fecha?.split('T')[0] || f.fecha || null,
-          fecha_vto:      f.FechaVencimiento?.split('T')[0] || null,
-          total:          f.Total || f.total || 0,
-          subtotal:       (f.Total || 0) / 1.21,
-          iva_21:         (f.Total || 0) - (f.Total || 0) / 1.21,
-          estado:         f.Estado === 2 ? 'cobrada' : 'pendiente',
-          obs:            f.Observaciones || f.observaciones || '',
-          cond_venta:     f.CondicionVenta || f.condicionVenta || '',
+          cliente_nombre: (o.Comprador || '').trim(),
+          fecha:          fecha || new Date().toISOString().split('T')[0],
+          total,
+          subtotal:       total,
+          estado,
+          obs:            o.Observaciones || '',
+          vendedor:       o.Vendedor || '',
           ctb_id,
         }
-        const { data: ex } = await sb().from('facturas').select('id').eq('ctb_id', ctb_id).limit(1).maybeSingle()
+
+        const { data: ex } = await sb().from('ordenes_venta').select('id').eq('ctb_id', ctb_id).maybeSingle()
         if (ex) {
-          await sb().from('facturas').update(factData).eq('id', ex.id)
+          await sb().from('ordenes_venta').update(row).eq('id', ex.id)
         } else {
-          const { data: exNro } = await sb().from('facturas').select('id').eq('nro', nro).limit(1).maybeSingle()
-          if (exNro) {
-            await sb().from('facturas').update({ ...factData }).eq('id', exNro.id)
-          } else {
-            await sb().from('facturas').insert({ ...factData, punto_venta: 1 })
-          }
+          const { data: exN } = await sb().from('ordenes_venta').select('id').eq('nro', nro).maybeSingle()
+          if (exN) await sb().from('ordenes_venta').update({ ctb_id, estado, total }).eq('id', exN.id)
+          else await sb().from('ordenes_venta').insert(row)
         }
         count++
       }
-      results.facturas = count
-    } catch (e: unknown) {
-      errors.push(`Facturas: ${(e as Error).message}`)
-    }
-  }
-
-  // ── PRESUPUESTOS ────────────────────────────────────────────
-  if (modulos.includes('presupuestos')) {
-    try {
-      const items = await paginateAll('/presupuestos?condicion=')
-      let count = 0
-      for (const p of items) {
-        const ctb_id = p.Id || p.id
-        const nro    = String(p.Numero || p.numero || ctb_id)
-        const pData = {
-          nro,
-          cliente_nombre: p.RazonSocial || p.razonSocial || '',
-          fecha:          p.Fecha?.split('T')[0] || null,
-          fecha_vto:      p.FechaVencimiento?.split('T')[0] || null,
-          total:          p.Total || p.total || 0,
-          subtotal:       p.Subtotal || p.subtotal || 0,
-          estado:         mapEstadoPresup(p.Estado || p.estado),
-          obs:            p.Observaciones || '',
-          ctb_id,
-        }
-        const { data: ex } = await sb().from('presupuestos').select('id').eq('ctb_id', ctb_id).limit(1).maybeSingle()
-        if (ex) {
-          await sb().from('presupuestos').update(pData).eq('id', ex.id)
-        } else {
-          await sb().from('presupuestos').insert(pData).select().single()
-        }
-        count++
-      }
-      results.presupuestos = count
-    } catch (e: unknown) {
-      errors.push(`Presupuestos: ${(e as Error).message}`)
-    }
+      results.ordenes = count
+    } catch (e: unknown) { errors.push(`Órdenes: ${(e as Error).message}`) }
   }
 
   // ── PROVEEDORES ─────────────────────────────────────────────
   if (modulos.includes('proveedores')) {
     try {
-      const items = await paginateAll('/proveedores?condicion=')
-      let count = 0
+      const items = await paginateSearch('/api/proveedores/Search?razonSocial=')
+      let count   = 0
       for (const p of items) {
-        const ctb_id = p.Id || p.id
-        const nombre = p.RazonSocial || p.razonSocial || p.Nombre || ''
+        const nombre = (p.RazonSocial || p.Nombre || '').trim()
         if (!nombre) continue
-        const pData = {
+        const ctb_id = p.Id
+        const row = {
           razon_social: nombre,
-          cuit:         p.NroDocumento || p.nroDocumento || '',
-          email:        p.Email || p.email || '',
-          telefono:     p.Telefono || p.telefono || '',
-          direccion:    p.Domicilio || p.domicilio || '',
-          ciudad:       p.Localidad || p.localidad || '',
-          provincia:    p.Provincia || p.provincia || '',
-          cond_iva:     p.CondicionIVA || 'Responsable Inscripto',
+          cuit:         p.NroDoc || p.NroDocumento || '',
+          email:        p.Email || '',
+          telefono:     p.Telefono || '',
+          direccion:    p.Domicilio || '',
+          ciudad:       p.Ciudad || '',
+          provincia:    p.Provincia || '',
+          cond_iva:     mapCondIva(p.CondicionIva || ''),
           ctb_id,
+          activo:       true,
         }
-        const { data: ex } = await sb().from('proveedores').select('id').eq('ctb_id', ctb_id).limit(1).maybeSingle()
-        if (ex) {
-          await sb().from('proveedores').update(pData).eq('id', ex.id)
-        } else {
-          await sb().from('proveedores').insert({ ...pData, activo: true })
-        }
+        const { data: ex } = await sb().from('proveedores').select('id').eq('ctb_id', ctb_id).maybeSingle()
+        if (ex) await sb().from('proveedores').update(row).eq('id', ex.id)
+        else await sb().from('proveedores').insert(row)
         count++
       }
       results.proveedores = count
-    } catch (e: unknown) {
-      errors.push(`Proveedores: ${(e as Error).message}`)
-    }
-  }
-
-  // ── REMITOS ─────────────────────────────────────────────────
-  if (modulos.includes('remitos')) {
-    try {
-      const items = await paginateAll('/remitos?condicion=')
-      let count = 0
-      for (const r of items) {
-        const ctb_id = r.Id || r.id
-        const nro    = String(r.Numero || r.numero || ctb_id)
-        const rData = {
-          nro,
-          cliente_nombre: r.RazonSocial || r.razonSocial || '',
-          fecha:          r.Fecha?.split('T')[0] || null,
-          estado:         r.Estado === 2 ? 'entregado' : 'pendiente',
-          obs:            r.Observaciones || '',
-          ctb_id,
-        }
-        const { data: ex } = await sb().from('remitos').select('id').eq('ctb_id', ctb_id).limit(1).maybeSingle()
-        if (ex) {
-          await sb().from('remitos').update(rData).eq('id', ex.id)
-        } else {
-          await sb().from('remitos').insert(rData).select().single()
-        }
-        count++
-      }
-      results.remitos = count
-    } catch (e: unknown) {
-      errors.push(`Remitos: ${(e as Error).message}`)
-    }
+    } catch (e: unknown) { errors.push(`Proveedores: ${(e as Error).message}`) }
   }
 
   return NextResponse.json({ ok: true, results, errors, synced_at: new Date().toISOString() })
 }
 
-// GET /api/sync — test connection
+// ── GET /api/sync — probar conexión ──────────────────────────
 export async function GET() {
   if (!CTB_CLIENT_ID) return NextResponse.json({ connected: false, error: 'Sin credenciales' })
   try {
@@ -274,13 +205,19 @@ export async function GET() {
   }
 }
 
-function mapEstadoPresup(raw: number | string) {
-  if (typeof raw === 'number') {
-    if (raw === 2) return 'aceptado'
-    if (raw === 3) return 'rechazado'
-    if (raw === 4) return 'convertido'
-    if (raw === 5) return 'vencido'
-    if (raw === 1) return 'enviado'
-  }
-  return 'borrador'
+function mapCondIva(raw: string): string {
+  const r = raw.toUpperCase()
+  if (r === 'RI') return 'Responsable Inscripto'
+  if (r === 'M' || r === 'MT') return 'Monotributista'
+  if (r === 'EX') return 'Exento'
+  if (r === 'CF') return 'Consumidor Final'
+  return raw || 'Responsable Inscripto'
+}
+
+function mapEstadoOV(raw: string): string {
+  const r = raw.toLowerCase()
+  if (r.includes('finaliz') || r.includes('factur')) return 'facturada_total'
+  if (r.includes('parcial')) return 'facturada_parcial'
+  if (r.includes('anul') || r.includes('cancel')) return 'anulada'
+  return 'pendiente'
 }
