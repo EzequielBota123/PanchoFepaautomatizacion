@@ -224,18 +224,19 @@ async function syncPageData(modulo: string, page: number): Promise<{ count: numb
 
   // ── FACTURAS (desde IDComprobante de OVs) ───────────────────
   if (modulo === 'facturas') {
-    // Tomar OVs con ctb_comprobante_id que no están aún en facturas
-    const offset = (page - 1) * 20
+    // Batch de 5 por request para no hacer timeout en Vercel Hobby (10s limit)
+    const BATCH = 5
+    const offset = (page - 1) * BATCH
     const { data: ovs, count: total } = await sb()
       .from('ordenes_venta')
       .select('id, ctb_comprobante_id, cliente_id, cliente_nombre', { count: 'exact' })
       .not('ctb_comprobante_id', 'is', null)
       .gt('ctb_comprobante_id', 0)
-      .range(offset, offset + 19)
+      .range(offset, offset + BATCH - 1)
 
     if (!ovs?.length) return { count: 0, totalPages: 1 }
 
-    const totalPages = Math.ceil((total || 0) / 20) || 1
+    const totalPages = Math.ceil((total || 0) / BATCH) || 1
     let count = 0
 
     for (const ov of ovs) {
