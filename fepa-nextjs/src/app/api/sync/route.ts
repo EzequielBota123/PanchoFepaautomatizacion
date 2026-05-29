@@ -26,7 +26,10 @@ async function paginateAll(path: string) {
   while (true) {
     const sep = path.includes('?') ? '&' : '?'
     const data = await ctbFetch(`${path}${sep}page=${page}&pageSize=100`)
-    const items = data?.Items || data?.items || data?.Data || data?.data || []
+    // Contabilium puede devolver el array directamente o dentro de Items/Data
+    const items = Array.isArray(data)
+      ? data
+      : data?.Items || data?.items || data?.Data || data?.data || data?.results || []
     if (!items.length) break
     results.push(...items)
     page++
@@ -53,7 +56,7 @@ export async function POST(req: NextRequest) {
   // ── CLIENTES ──────────────────────────────────────────────
   if (modulos.includes('clientes')) {
     try {
-      const items = await paginateAll('/web/clientes?condicion=')
+      const items = await paginateAll('/clientes?condicion=')
       let count = 0
       for (const c of items) {
         const nombre = c.RazonSocial || c.razonSocial || c.Nombre || ''
@@ -92,7 +95,7 @@ export async function POST(req: NextRequest) {
   // ── FACTURAS / COMPROBANTES ────────────────────────────────
   if (modulos.includes('facturas')) {
     try {
-      const items = await paginateAll('/web/comprobantes?condicion=&periodo=365')
+      const items = await paginateAll('/comprobantes?condicion=&periodo=365')
       let count = 0
       for (const f of items) {
         const nro    = f.Numero || f.numero || f.NroComprobante || ''
@@ -134,7 +137,7 @@ export async function POST(req: NextRequest) {
   // ── PRESUPUESTOS ────────────────────────────────────────────
   if (modulos.includes('presupuestos')) {
     try {
-      const items = await paginateAll('/web/presupuestos?condicion=')
+      const items = await paginateAll('/presupuestos?condicion=')
       let count = 0
       for (const p of items) {
         const ctb_id = p.Id || p.id
@@ -167,7 +170,7 @@ export async function POST(req: NextRequest) {
   // ── PROVEEDORES ─────────────────────────────────────────────
   if (modulos.includes('proveedores')) {
     try {
-      const items = await paginateAll('/web/proveedores?condicion=')
+      const items = await paginateAll('/proveedores?condicion=')
       let count = 0
       for (const p of items) {
         const ctb_id = p.Id || p.id
@@ -201,7 +204,7 @@ export async function POST(req: NextRequest) {
   // ── REMITOS ─────────────────────────────────────────────────
   if (modulos.includes('remitos')) {
     try {
-      const items = await paginateAll('/web/remitos?condicion=')
+      const items = await paginateAll('/remitos?condicion=')
       let count = 0
       for (const r of items) {
         const ctb_id = r.Id || r.id
@@ -235,7 +238,7 @@ export async function POST(req: NextRequest) {
 export async function GET() {
   if (!CTB_API_KEY) return NextResponse.json({ connected: false, error: 'Sin API key' })
   try {
-    await ctbFetch('/web/clientes?condicion=&page=1&pageSize=1')
+    await ctbFetch('/clientes?condicion=&page=1&pageSize=1')
     return NextResponse.json({ connected: true })
   } catch (e: unknown) {
     return NextResponse.json({ connected: false, error: (e as Error).message })
