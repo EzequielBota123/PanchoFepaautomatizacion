@@ -76,21 +76,24 @@ export interface Deposito {
 
 // ── ORDEN DE VENTA ─────────────────────────────────────────────────────────
 export interface OrdenVenta {
-  id:             number
-  nro:            string
-  cliente_id:     number | null
-  cliente_nombre: string
-  fecha:          string
-  fecha_entrega:  string | null
-  deposito_id:    number | null
-  estado:         EstadoOV
-  subtotal:       number
-  descuento:      number
-  total:          number
-  obs:            string
-  vendedor:       string
-  items?:         ItemOV[]
-  created_at?:    string
+  id:                  number
+  nro:                 string
+  cliente_id:          number | null
+  cliente_nombre:      string
+  fecha:               string
+  fecha_entrega:       string | null
+  deposito_id:         number | null
+  estado:              EstadoOV
+  subtotal:            number
+  descuento:           number
+  total:               number
+  obs:                 string
+  vendedor:            string
+  ctb_id:              number | null
+  ctb_persona_id:      number | null
+  ctb_comprobante_id:  number | null
+  items?:              ItemOV[]
+  created_at?:         string
 }
 
 export interface ItemOV {
