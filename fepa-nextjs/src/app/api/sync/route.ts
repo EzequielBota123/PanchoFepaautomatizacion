@@ -251,11 +251,11 @@ async function syncPageData(modulo: string, page: number): Promise<{ count: numb
         const ctbF = await ctbGet(`/api/comprobantes/GetById?id=${ov.ctb_comprobante_id}`)
         if (!ctbF?.Numero) { count++; continue }
 
-        const totalNeto = parseMoney(ctbF.ImporteTotalNeto)
-        const neto      = parseMoney(ctbF.ImporteTotalBruto)
-        const iva21     = totalNeto - neto
+        const totalBruto = parseMoney(ctbF.ImporteTotalBruto)  // neto sin IVA
+        const totalNeto  = parseMoney(ctbF.ImporteTotalNeto)   // total con IVA
+        const iva21      = Math.max(0, totalNeto - totalBruto)
 
-        await sb().from('facturas').upsert({
+        const facturaRow = {
           nro:            ctbF.Numero,
           tipo:           ctbF.TipoFc?.includes('A') ? 'A' : ctbF.TipoFc?.includes('C') ? 'C' : 'B',
           punto_venta:    ctbF.PuntoVenta || 1,
@@ -263,15 +263,18 @@ async function syncPageData(modulo: string, page: number): Promise<{ count: numb
           cliente_nombre: ctbF.RazonSocial || ov.cliente_nombre || '',
           fecha:          ctbF.FechaEmision?.split('T')[0] || new Date().toISOString().split('T')[0],
           fecha_vto:      ctbF.FechaVencimiento?.split('T')[0] || null,
-          subtotal:       neto,
-          iva_21:         iva21 > 0 ? iva21 : 0,
+          subtotal:       totalBruto,
+          iva_21:         iva21,
           total:          totalNeto,
           cae:            ctbF.Cae || '',
           estado:         parseMoney(ctbF.Saldo) > 0 ? 'pendiente' : 'cobrada',
           obs:            ctbF.Observaciones || '',
           cond_venta:     ctbF.CondicionVenta || '',
           ctb_id:         ov.ctb_comprobante_id,
-        }, { onConflict: 'ctb_id' })
+        }
+
+        // insert simple — ya chequeamos que no existe antes
+        await sb().from('facturas').insert(facturaRow)
         count++
       } catch { count++ }
     }
