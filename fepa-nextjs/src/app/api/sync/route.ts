@@ -237,12 +237,8 @@ export async function POST(req: NextRequest) {
 // GET /api/sync — test connection
 export async function GET() {
   if (!CTB_API_KEY) return NextResponse.json({ connected: false, error: 'Sin API key' })
-  try {
-    await ctbFetch('/clientes?condicion=&page=1&pageSize=1')
-    return NextResponse.json({ connected: true })
-  } catch (e: unknown) {
-    return NextResponse.json({ connected: false, error: (e as Error).message })
-  }
+  // URL base pendiente de confirmar con Contabilium
+  return NextResponse.json({ connected: false, error: 'Endpoint pendiente de configuración — consultá la documentación de Contabilium' })
 }
 
 function mapEstadoPresup(raw: number | string) {
